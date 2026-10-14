@@ -9,6 +9,17 @@ GAMMA='https://gamma-api.polymarket.com'
 CLOB='https://clob.polymarket.com'
 WS='wss://ws-subscriptions-clob.polymarket.com/ws/market'
 
+def load_env_file(path=Path('.env')):
+    """Load Botkeep's project-level .env without overwriting real env vars."""
+    if not path.is_file(): return
+    for raw in path.read_text().splitlines():
+        line=raw.strip()
+        if not line or line.startswith('#') or '=' not in line: continue
+        key,value=line.split('=',1)
+        key=key.removeprefix('export ').strip(); value=value.strip()
+        if len(value)>=2 and value[0]==value[-1] and value[0] in "'\"": value=value[1:-1]
+        if key: os.environ.setdefault(key,value)
+
 class Store:
     def __init__(self,path):
         path.parent.mkdir(parents=True,exist_ok=True)
@@ -159,6 +170,8 @@ class Service:
                 'events':self.store.recent()}
 
 async def main():
+    # Botkeep writes configured environment values to a project-level .env file.
+    load_env_file()
     service=Service()
     token=os.getenv('DASHBOARD_TOKEN','')
     if len(token)<16: raise ValueError('Set DASHBOARD_TOKEN to at least 16 characters')
