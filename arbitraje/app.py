@@ -25,7 +25,7 @@ class Store:
         path.parent.mkdir(parents=True,exist_ok=True)
         self.db=sqlite3.connect(path)
         self.db.execute('PRAGMA journal_mode=WAL')
-        self.db.executescript('CREATE TABLE IF NOT EXISTS state (name TEXT PRIMARY KEY, value TEXT); CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, time REAL, strategy TEXT, payload TEXT);')
+        self.db.executescript('CREATE TABLE IF NOT EXISTS state (name TEXT PRIMARY KEY, value TEXT); CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, time REAL, strategy TEXT, payload TEXT); CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY, time REAL, strategy TEXT, payload TEXT);')
     def load(self,name):
         row=self.db.execute('SELECT value FROM state WHERE name=?',(name,)).fetchone()
         return json.loads(row[0]) if row else None
@@ -35,11 +35,18 @@ class Store:
                 self.db.execute('INSERT OR REPLACE INTO state VALUES (?,?)',(name,json.dumps(e.s)))
                 for event in e.events:
                     self.db.execute('INSERT INTO events(time,strategy,payload) VALUES (?,?,?)',(event['time'],name,json.dumps(event)))
+                    if event.get('kind')=='transaction':
+                        self.db.execute('INSERT INTO transactions(time,strategy,payload) VALUES (?,?,?)',(event['time'],name,json.dumps(event)))
                 e.events.clear()
             # Bounded event history; lifetime totals persist in state. No raw-book archive in MVP.
             self.db.execute('DELETE FROM events WHERE id <= (SELECT COALESCE(MAX(id),0)-20000 FROM events)')
+            self.db.execute('DELETE FROM transactions WHERE id <= (SELECT COALESCE(MAX(id),0)-5000 FROM transactions)')
     def recent(self):
         return [dict(strategy=r[0],**json.loads(r[1])) for r in self.db.execute('SELECT strategy,payload FROM events ORDER BY id DESC LIMIT 60')]
+    def transactions(self,limit=200):
+        limit=max(1,min(int(limit),500))
+        rows=self.db.execute('SELECT id,time,strategy,payload FROM transactions ORDER BY id DESC LIMIT ?',(limit,))
+        return [dict(json.loads(r[3]),id=r[0],time=r[1],strategy=r[2]) for r in rows]
 
 class Service:
     def __init__(self):
@@ -167,7 +174,7 @@ class Service:
                 'books':[{'age_seconds':now-b.updated if b.updated else None,
                           'bid':float(max(b.bids)) if b.bids else None,
                           'ask':float(min(b.asks)) if b.asks else None} for b in self.books],
-                'events':self.store.recent()}
+                'events':self.store.recent(),'transactions':self.store.transactions()}
 
 async def main():
     # Botkeep writes configured environment values to a project-level .env file.
