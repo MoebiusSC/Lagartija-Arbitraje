@@ -1,6 +1,42 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Arbitraje · Paper</title>
-<style>body{background:#101827;color:#eef2f8;font:16px system-ui;margin:0;padding:30px;max-width:1100px;margin:auto}h1{font-size:32px}small{color:#aab8cb}.cards{display:flex;gap:20px;flex-wrap:wrap}article{background:#1b283d;border-radius:14px;padding:20px;flex:1;min-width:240px}strong{font-size:28px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:10px;border-bottom:1px solid #344056}input,button{padding:10px;background:#253652;color:white;border:1px solid #64748b;border-radius:6px}pre{white-space:pre-wrap;word-break:break-word}#error{color:#ffb9a5}</style>
-<h1>Arbitraje <small>BTC 5 min · Paper</small></h1><p>Simulación con datos reales. Los fills maker son estimados; estos resultados no acreditan rentabilidad real.</p>
-<input id="token" type="password" placeholder="Token del panel"><button id="connect">Conectar</button><p id="error"></p><p id="status">Esperando datos…</p><div class="cards" id="cards"></div>
-<h2>Libro de órdenes</h2><div id="books"></div><h2>Últimos eventos</h2><table><thead><tr><th>Hora</th><th>Estrategia</th><th>Evento</th><th>PnL</th></tr></thead><tbody id="events"></tbody></table>
-<script>let token='';document.getElementById('connect').onclick=()=>{token=document.getElementById('token').value;refresh()};const money=x=>Number(x).toFixed(2);function cell(row,value){const c=document.createElement('td');c.textContent=value;row.append(c)}async function refresh(){try{const r=await fetch('/api/state',{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('Acceso pendiente: introduce el token configurado.');const s=await r.json();document.getElementById('error').textContent='';document.getElementById('status').textContent=(s.status.connected?'Feed conectado':'Feed desconectado')+' · '+(s.status.market||'Buscando mercado')+' · '+(s.status.error||'')+' · Comisión asumida: '+s.status.fee_rate_assumption;const cards=document.getElementById('cards');cards.replaceChildren();for(const [name,v]of Object.entries(s.strategies)){const a=document.createElement('article');const h=document.createElement('h2');h.textContent=name;a.append(h);const p=document.createElement('strong');p.textContent='$'+money(v.pnl)+' realizado';a.append(p);const info=document.createElement('p');info.textContent='Efectivo $'+money(v.cash)+' · Cierres '+v.trades+' · Coberturas fallidas '+v.failed_hedges+' · '+(v.halted?'DETENIDO: exposición pendiente':v.pending?'Posición pendiente':v.quote?'Orden maker pendiente':'Observando');a.append(info);cards.append(a)}document.getElementById('books').textContent=s.books.map((b,i)=>(i?'Down':'Up')+': bid '+b.bid+' / ask '+b.ask+' · edad '+(b.age_seconds===null?'—':b.age_seconds.toFixed(1)+' s')).join(' | ');const rows=document.getElementById('events');rows.replaceChildren();for(const e of s.events){const row=document.createElement('tr');cell(row,new Date(e.time*1000).toLocaleTimeString());cell(row,e.strategy);cell(row,e.kind);cell(row,e.pnl===undefined?'—':'$'+money(e.pnl));rows.append(row)}}catch(e){document.getElementById('error').textContent=e.message}}refresh();setInterval(refresh,3000)</script></html>
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arbitraje · Paper</title>
+<style>
+  :root{color-scheme:dark;--bg:#101827;--card:#1b283d;--line:#344056;--muted:#aab8cb;--good:#6ee7b7;--bad:#ff9a84}
+  *{box-sizing:border-box}body{background:var(--bg);color:#eef2f8;font:15px system-ui;margin:0;padding:30px;max-width:1320px;margin:auto}
+  h1{font-size:32px;margin-bottom:8px}h2{margin-top:30px}small,.muted{color:var(--muted)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+  article,.panel{background:var(--card);border-radius:14px;padding:18px}strong{font-size:27px}.scroll{overflow:auto;border:1px solid var(--line);border-radius:12px}
+  table{width:100%;border-collapse:collapse;min-width:880px}td,th{text-align:left;padding:10px;border-bottom:1px solid var(--line);white-space:nowrap}th{background:#182438;position:sticky;top:0}
+  input,button{padding:10px;background:#253652;color:white;border:1px solid #64748b;border-radius:6px}button{cursor:pointer}.positive{color:var(--good)}.negative,#error{color:var(--bad)}
+</style>
+<h1>Arbitraje <small>BTC 5 min · Paper</small></h1>
+<p>Simulación con datos reales. Los fills maker son estimados; estos resultados no acreditan rentabilidad real.</p>
+<div class="toolbar"><input id="token" type="password" placeholder="Token del panel"><button id="connect">Conectar</button><button id="csv" disabled>Descargar transacciones CSV</button></div>
+<p id="error"></p><p id="status">Esperando datos…</p>
+<div class="cards" id="cards"></div>
+<h2>Libro de órdenes</h2><div class="panel" id="books">Esperando datos…</div>
+<h2>Transacciones ejecutadas</h2>
+<div class="cards" id="tx-summary"></div>
+<p class="muted">Historial persistente de los últimos 200 ciclos completados. Incluye operaciones emparejadas y salidas de emergencia.</p>
+<div class="scroll"><table><thead><tr><th>Fecha y hora</th><th>Estrategia</th><th>Mercado</th><th>Resultado</th><th>Cantidad</th><th>Pierna 1</th><th>Pierna 2</th><th>Fees</th><th>PnL</th></tr></thead><tbody id="transactions"></tbody></table></div>
+<h2>Últimos eventos técnicos</h2>
+<div class="scroll"><table><thead><tr><th>Hora</th><th>Estrategia</th><th>Evento</th><th>PnL</th></tr></thead><tbody id="events"></tbody></table></div>
+<script>
+let token='',lastTransactions=[];
+const $=id=>document.getElementById(id),money=x=>Number(x||0).toFixed(4),price=x=>x===undefined||x===null?'—':Number(x).toFixed(4);
+function cell(row,value,className=''){const c=document.createElement('td');c.textContent=value;c.className=className;row.append(c)}
+function card(title,value,detail=''){const a=document.createElement('article'),h=document.createElement('div'),v=document.createElement('strong'),p=document.createElement('p');h.textContent=title;v.textContent=value;p.textContent=detail;a.append(h,v,p);return a}
+function renderTransactions(items){
+  lastTransactions=items;const body=$('transactions');body.replaceChildren();
+  if(!items.length){const row=document.createElement('tr'),c=document.createElement('td');c.colSpan=9;c.textContent='Todavía no hay ciclos completados.';row.append(c);body.append(row)}
+  for(const t of items){const row=document.createElement('tr'),pnl=Number(t.pnl||0);cell(row,new Date(t.time*1000).toLocaleString());cell(row,t.strategy);cell(row,t.market||'—');cell(row,t.result||'—');cell(row,price(t.quantity));cell(row,(t.leg1||'—')+' @ '+price(t.leg1_price));cell(row,(t.leg2||'—')+' @ '+price(t.leg2_price));cell(row,'$'+money(t.fees));cell(row,'$'+money(pnl),pnl>=0?'positive':'negative');body.append(row)}
+  const total=items.reduce((a,t)=>a+Number(t.pnl||0),0),fees=items.reduce((a,t)=>a+Number(t.fees||0),0),wins=items.filter(t=>Number(t.pnl||0)>0).length,summary=$('tx-summary');summary.replaceChildren(card('Ciclos registrados',String(items.length),'máximo mostrado: 200'),card('PnL del historial','$'+money(total),items.length?((wins/items.length)*100).toFixed(1)+'% positivos':'sin operaciones'),card('Fees estimados','$'+money(fees),'según el modelo paper'));$('csv').disabled=!items.length;
+}
+function csv(){const cols=['time','strategy','market','execution','result','quantity','leg1','leg1_price','leg2','leg2_price','fees','pnl'],lines=[cols.join(',')];for(const t of lastTransactions)lines.push(cols.map(k=>'"'+String(k==='time'?new Date(t[k]*1000).toISOString():(t[k]??'')).replaceAll('"','""')+'"').join(','));const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));a.download='transacciones-paper.csv';a.click();URL.revokeObjectURL(a.href)}
+async function refresh(){try{const r=await fetch('/api/state',{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('Acceso pendiente: introduce el token configurado.');const s=await r.json();$('error').textContent='';$('status').textContent=(s.status.connected?'Feed conectado':'Feed desconectado')+' · '+(s.status.market||'Buscando mercado')+' · '+(s.status.error||'')+' · Comisión asumida: '+s.status.fee_rate_assumption;const cards=$('cards');cards.replaceChildren();for(const [name,v]of Object.entries(s.strategies)){cards.append(card(name,'$'+Number(v.pnl).toFixed(2)+' realizado','Efectivo $'+Number(v.cash).toFixed(2)+' · Cierres '+v.trades+' · Coberturas fallidas '+v.failed_hedges+' · '+(v.halted?'DETENIDO: exposición pendiente':v.pending?'Posición pendiente':v.quote?'Orden maker pendiente':'Observando')))}$('books').textContent=s.books.map((b,i)=>(i?'Down':'Up')+': bid '+b.bid+' / ask '+b.ask+' · edad '+(b.age_seconds===null?'—':b.age_seconds.toFixed(1)+' s')).join(' | ');renderTransactions(s.transactions||[]);const rows=$('events');rows.replaceChildren();for(const e of s.events){const row=document.createElement('tr');cell(row,new Date(e.time*1000).toLocaleTimeString());cell(row,e.strategy);cell(row,e.kind);cell(row,e.pnl===undefined?'—':'$'+money(e.pnl));rows.append(row)}}catch(e){$('error').textContent=e.message}}
+$('connect').onclick=()=>{token=$('token').value;refresh()};$('csv').onclick=csv;refresh();setInterval(refresh,3000);
+</script>
+</html>
