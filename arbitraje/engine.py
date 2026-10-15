@@ -134,11 +134,14 @@ class Engine:
                 cap=1-p['maker_price']  # may accept a loss after fees to remove directional risk
                 cost=books[p['side']].cost(p['q'],ceiling=cap)
                 if cost and cost[0]+cost[1]*self.c.rate<=self.s['cash']:
-                    paid=cost[0]+cost[1]*self.c.rate
+                    fee=cost[1]*self.c.rate
+                    paid=cost[0]+fee
                     profit=p['q']-p['q']*p['maker_price']-paid
                     self.s['cash']-=paid
                     self.s['releases'].append({'due':now+self.c.merge_seconds,'amount':p['q']})
-                    self.complete(now,profit,'paired',p['q'])
+                    self.complete(now,profit,'paired',p['q'],market=p['market'],execution='maker_taker',
+                                  leg1='maker '+('Up' if 1-p['side']==0 else 'Down'),leg1_price=p['maker_price'],
+                                  leg2='taker '+('Up' if p['side']==0 else 'Down'),leg2_price=cost[0]/p['q'],fees=fee)
                 else:
                     # Unwind maker side at available bids, with a separate execution delay.
                     p['kind']='unwind'; p['side']=1-p['side']; p['due']=now+self.c.latency
@@ -147,18 +150,25 @@ class Engine:
             elif p['kind']=='unwind':
                 cost=books[p['side']].cost(p['q'],buy=False)
                 if cost:
-                    proceeds=cost[0]-cost[1]*self.c.rate
+                    fee=cost[1]*self.c.rate
+                    proceeds=cost[0]-fee
                     self.s['cash']+=proceeds
-                    self.complete(now,proceeds-p['q']*p['maker_price'],'unwind',p['q'])
+                    self.complete(now,proceeds-p['q']*p['maker_price'],'unwind',p['q'],market=p['market'],
+                                  execution='maker_unwind',leg1='maker '+('Up' if p['side']==0 else 'Down'),
+                                  leg1_price=p['maker_price'],leg2='venta '+('Up' if p['side']==0 else 'Down'),
+                                  leg2_price=cost[0]/p['q'],fees=fee)
             elif p['kind']=='benchmark':
                 costs=[b.cost(p['q']) for b in books]
                 if all(costs):
-                    paid=sum(x[0]+x[1]*self.c.rate for x in costs)
+                    fees=sum(x[1]*self.c.rate for x in costs)
+                    paid=sum(x[0] for x in costs)+fees
                     if paid<=self.s['cash'] and p['q']-paid>=p['q']*self.c.edge:
                         self.s['cash']-=paid
                         self.s['releases'].append({'due':now+self.c.merge_seconds,'amount':p['q']})
                         self.s['last_benchmark_market']=market
-                        self.complete(now,p['q']-paid,'paired',p['q'])
+                        self.complete(now,p['q']-paid,'paired',p['q'],market=p['market'],execution='taker_taker',
+                                      leg1='taker Up',leg1_price=costs[0][0]/p['q'],
+                                      leg2='taker Down',leg2_price=costs[1][0]/p['q'],fees=fees)
                         return
                 self.s['pending']=None
                 self.event('benchmark_rejected',now)
@@ -190,6 +200,7 @@ class Engine:
                              'active_at':now+self.c.latency,'expires':now+self.c.quote_ttl,'market':market,'end':end}
             self.event('quote',now,side=side,price=price,queue_ahead=ahead)
 
-    def complete(self, now, profit, kind, quantity):
+    def complete(self, now, profit, kind, quantity, **details):
         self.s['pnl']+=profit; self.s['trades']+=1; self.s['pending']=None
         self.event(kind,now,pnl=profit,quantity=quantity)
+        self.event('transaction',now,result=kind,pnl=profit,quantity=quantity,**details)
