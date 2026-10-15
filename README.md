@@ -7,7 +7,7 @@ Bot **exclusivamente paper** para estudiar compras de pares Up + Down en mercado
 1. Crear un servicio Python (3.12 o superior). Importar este repositorio o subir el ZIP **con README.md, requirements.txt y arbitraje/ en la raíz del servicio**.
 2. Instalar dependencias: `python -m pip install -r requirements.txt`.
 3. Comando de inicio: `python -m arbitraje.app`.
-4. En Environment, configurar `DASHBOARD_TOKEN` (mínimo 16 caracteres aleatorios), `DATA_DIR=data` y el `SERVER_PORT` asignado por Botkeep. `.env.example` documenta opciones; la app NO carga archivos .env automáticamente.
+4. En Environment, configurar `DASHBOARD_TOKEN` (mínimo 16 caracteres aleatorios), `DATA_DIR=data` y el `SERVER_PORT` asignado por Botkeep. `.env.example` documenta opciones y la app carga automáticamente el `.env` de Botkeep.
 5. Asignar al menos 512 MB RAM. Configurar Domains para acceder al panel por HTTPS. Introducir el token en el panel; no se guarda en el navegador ni se transmite en la URL.
 6. Comprobar persistencia de `data/paper.sqlite` tras un reinicio, y exportar backups. No colocar data/ dentro de archivos reemplazados al actualizar código.
 7. `/health` responde 200 sólo con libros frescos; 503 significa proceso activo con feed no listo. No configurar reinicios automáticos por 503 sin tolerar fallos transitorios del proveedor.
