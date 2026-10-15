@@ -58,13 +58,22 @@ class Tests(unittest.TestCase):
     def test_persistence(self):
         with tempfile.TemporaryDirectory() as tmp:
             s=Store(Path(tmp)/'paper.sqlite'); e=Engine(Config()); e.s['pnl']=5
+            e.event('transaction',100,result='paired',market='btc-test',quantity=10,pnl=1,
+                    execution='maker_taker',leg1='maker Up',leg1_price=.4,
+                    leg2='taker Down',leg2_price=.5,fees=.1)
             s.save({'maker_taker':e}); new=Engine(Config(),s.load('maker_taker'))
-            self.assertEqual(new.s['pnl'],5); s.db.close()
+            self.assertEqual(new.s['pnl'],5)
+            tx=s.transactions(); self.assertEqual(len(tx),1)
+            self.assertEqual(tx[0]['market'],'btc-test'); self.assertEqual(tx[0]['pnl'],1)
+            s.db.close()
     def test_benchmark_net_fees(self):
         e=Engine(Config()); e.s['strategy']='taker_taker'; b=books()
         e.tick(b,100,'m',400); self.assertIsNone(e.s['pending'])
         for x in b: x.asks={D('.47'):D(100)}; x.bids={D('.46'):D(10)}
         e.tick(b,100,'m',400); self.assertIsNotNone(e.s['pending'])
         e.tick(b,101,'m',400); self.assertGreater(e.s['pnl'],0)
+        tx=[x for x in e.events if x['kind']=='transaction']
+        self.assertEqual(tx[0]['execution'],'taker_taker')
+        self.assertEqual(tx[0]['market'],'m')
 
 if __name__=='__main__': unittest.main()
